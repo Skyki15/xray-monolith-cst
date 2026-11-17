@@ -738,6 +738,9 @@ public:
 	virtual bool natural_weapon() const { return false; }
 	virtual bool natural_detector() const { return false; }
 	virtual bool use_center_to_aim() const;
+public:
+	// ID of whoever dealt the most recent hit (u16(-1) if none). Set by SetHitInfo() right before Hit().
+	u16 last_hitter_id() const { return m_iLastHitterID; }
 protected:
 	u16 m_iLastHitterID;
 	u16 m_iLastHittingWeaponID;

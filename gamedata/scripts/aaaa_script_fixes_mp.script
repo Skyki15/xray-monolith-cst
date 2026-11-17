@@ -106,6 +106,42 @@ function xrs_facer.hit_callback(obj, amount, dir, who, bone_index)
 	end
 end
 
+-- utils_obj.try_to_strafe: radius was never reset between the two directions, so after the
+-- first side's loop ran radius down to 0 the second side (+90 deg) was never tried and NPCs
+-- only ever strafed one way. Same logic otherwise; validate() mirrors utils_obj's local one.
+do
+	local function strafe_validate(npc, vid)
+		if (vid and vid < 4294967295 and npc:accessible(vid) and vid ~= npc:level_vertex_id()) then
+			return db.used_level_vertex_ids[vid] == nil or db.used_level_vertex_ids[vid] == npc:id()
+		end
+		return false
+	end
+
+	function utils_obj.try_to_strafe(npc, old_vid)
+		local _dir = npc:direction()
+		local dir = {}
+		dir[1] = vector_rotate_y(vec_set(_dir), -90)
+		dir[2] = vector_rotate_y(vec_set(_dir), 90)
+		-- try a random side first so NPCs don't always favour the same one
+		if (math.random(2) == 2) then
+			dir[1], dir[2] = dir[2], dir[1]
+		end
+		local vid
+		local base_point = npc:level_vertex_id()
+
+		for i = 1, 2 do
+			local radius = 10
+			while (radius > 0) do
+				vid = level.vertex_in_direction(base_point, dir[i], radius)
+				if (strafe_validate(npc, vid)) then
+					return utils_obj.lmove(npc, vid, old_vid)
+				end
+				radius = radius - 2
+			end
+		end
+	end
+end
+
 -- axr_trade_manager npc trading fixes
 function axr_trade_manager.npc_trade_buy_sell(npc)
 	local id = npc and npc:id()

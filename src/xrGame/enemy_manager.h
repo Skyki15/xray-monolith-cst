@@ -47,6 +47,10 @@ private:
 
 private:
 	u32 m_last_enemy_change;
+	u32 m_last_recheck_time;
+	// Target held before the current re-selection; only set while try_change_enemy() re-evaluates,
+	// so evaluate() can apply the switch margin. nullptr otherwise (never dangles).
+	const CEntityAlive* m_current_target_for_eval;
 
 private:
 	IC bool enemy_inertia(const CEntityAlive* previous_enemy) const;

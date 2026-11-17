@@ -224,6 +224,10 @@ extern u32 ENEMY_INERTIA_TIME_TO_SOMEBODY;
 extern u32 ENEMY_INERTIA_TIME_TO_ACTOR;
 extern u32 ENEMY_INERTIA_TIME_FROM_ACTOR;
 extern u32 ENEMY_INERTIA_TIME_SEARCH;
+extern float g_ai_enemy_bias_actor_sees;
+extern float g_ai_enemy_bias_npc_sees;
+extern u32 g_ai_enemy_recheck_interval;
+extern float g_ai_enemy_switch_margin;
 
 extern float g_ai_vision_speed_boost;
 extern float g_ai_reload_threshold;
@@ -2907,6 +2911,12 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "ai_enemy_inertia_time_to_actor", (int*)&ENEMY_INERTIA_TIME_TO_ACTOR, 0, 120000);
     CMD4(CCC_Integer, "ai_enemy_inertia_time_from_actor", (int*)&ENEMY_INERTIA_TIME_FROM_ACTOR, 0, 120000);
     CMD4(CCC_Integer, "ai_search_inertia_time", (int*)&ENEMY_INERTIA_TIME_SEARCH, 0, 120000);
+    // Enemy-selection bonus for an enemy that currently sees the NPC (actor: on the player's screen)
+    CMD4(CCC_Float, "ai_enemy_bias_actor_sees", &g_ai_enemy_bias_actor_sees, 0.f, 2000.f);
+    CMD4(CCC_Float, "ai_enemy_bias_npc_sees", &g_ai_enemy_bias_npc_sees, 0.f, 2000.f);
+    // Periodic target re-check (ms, 0 = events only) and switch margin (fraction) for enemy selection
+    CMD4(CCC_Integer, "ai_enemy_recheck_interval", (int*)&g_ai_enemy_recheck_interval, 0, 10000);
+    CMD4(CCC_Float, "ai_enemy_switch_margin", &g_ai_enemy_switch_margin, 0.f, 0.9f);
 
     CMD4(CCC_Integer, "ai_hold_position_inertia_base", &g_ai_hold_position_inertia_base, 0, 120000);
     CMD4(CCC_Integer, "ai_hold_position_inertia_random", &g_ai_hold_position_inertia_random, 0, 120000);

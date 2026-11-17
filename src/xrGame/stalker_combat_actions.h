@@ -120,6 +120,13 @@ private:
 	MonsterSpace::EMovementType m_movement_type;
 	const CCoverPoint* m_last_notified_cover;
 
+	// Teammate-stacking fallback (used when no cover point is available)
+	u32 m_stack_vertex_id;
+	Fvector m_stack_position;
+	u32 m_stack_next_update_time;
+
+	bool select_teammate_stack_position(const Fvector& enemy_position);
+
 public:
 	CStalkerActionTakeCover(CAI_Stalker* object, LPCSTR action_name = "");
 	virtual void initialize();

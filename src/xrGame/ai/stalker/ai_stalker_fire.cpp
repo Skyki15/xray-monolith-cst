@@ -328,7 +328,9 @@ void CAI_Stalker::Hit(SHit* pHDS)
 			if(entity_alive && entity_alive->g_Alive() && tfGetRelationType(entity_alive) == ALife::eRelationTypeEnemy)
 			{
 				movement().set_mental_state(eMentalStateDanger);
-				if (!memory().visual().visible_now(entity_alive))
+				// Being hit only reveals the shooter if we could actually see them from here;
+				// a shot through cover still registers in hit memory (direction) but not as a sighting.
+				if (!memory().visual().visible_now(entity_alive) && memory().visual().has_static_line_of_sight(entity_alive))
 				{
 					CNotYetVisibleObject		new_object;
 					new_object.m_object			= smart_cast<const CGameObject*>(pHDS->initiator());

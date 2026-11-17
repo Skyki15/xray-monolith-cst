@@ -286,13 +286,19 @@ void CSoundMemoryManager::add(const CObject* object, int sound_type, const Fvect
 			if(who_entity_alive && who_entity_alive->g_Alive() && !m_object->memory().visual().visible_now(who_entity_alive))
 			{
 				stalker->movement().set_mental_state(eMentalStateDanger);
-				CNotYetVisibleObject        new_object;
-				new_object.m_object         = smart_cast<const CGameObject*>(object);
-				new_object.m_value          = 1.0f;
-				new_object.m_prev_time      = Device.dwTimeGlobal-1;
-				new_object.m_update_time    = Device.dwTimeGlobal;
-				m_object->memory().visual().add_not_yet_visible_object(new_object);
-				m_object->memory().visual().add_visible_object(object, Device.fTimeDelta);
+				// Only let the sound "reveal" the source when we could actually see it from here;
+				// otherwise an enemy behind a wall would count as seen (exact position, visible bonus).
+				// The sound itself is still remembered below and drives danger/search behaviour.
+				if (m_object->memory().visual().has_static_line_of_sight(object))
+				{
+					CNotYetVisibleObject        new_object;
+					new_object.m_object         = smart_cast<const CGameObject*>(object);
+					new_object.m_value          = 1.0f;
+					new_object.m_prev_time      = Device.dwTimeGlobal-1;
+					new_object.m_update_time    = Device.dwTimeGlobal;
+					m_object->memory().visual().add_not_yet_visible_object(new_object);
+					m_object->memory().visual().add_visible_object(object, Device.fTimeDelta);
+				}
 				//Msg("sound_power %f", sound_power);
 			}
 		}

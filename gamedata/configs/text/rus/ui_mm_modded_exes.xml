@@ -935,7 +935,7 @@
 		<text>Инерция врага ИИ: К игроку (мс) (ai_enemy_inertia_time_to_actor)</text>
 	</string>
 	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_inertia_time_to_actor_desc">
-		<text>Определяет задержку, прежде чем NPC сможет переключить внимание с другой цели на игрока.\n \nЗначение 0 (по умолчанию) означает, что NPC бросит все дела, чтобы выстрелить в игрока в момент его обнаружения. Увеличение этого параметра дает игроку «период благодати», если NPC уже занят боем с кем-то другим.</text>
+		<text>Задержка, прежде чем NPC сможет переключить внимание с другой цели на игрока.\n \nПо умолчанию 600 мс, как и для любой другой цели. 0 (оригинал) означает, что NPC бросают всё и стреляют в игрока, как только заметят его. Увеличение даёт игроку «запас времени», если NPC уже занят боем с кем-то другим.</text>
 	</string>
 	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_inertia_time_from_actor">
 		<text>Инерция врага ИИ: От игрока (мс) (ai_enemy_inertia_time_from_actor)</text>
@@ -948,6 +948,30 @@
 	</string>
 	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_search_inertia_time_desc">
 		<text>Устанавливает время, в течение которого NPC будет находиться в состоянии «Поиск/Засада» после потери визуального контакта с целью.\n \nВысокие значения (по умолчанию 15с) заставляют NPC долго оставаться начеку и выжидать за углами или в укрытии. Низкие значения заставляют их быстрее сдаваться и возвращаться в режим ожидания или патрулирования.</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_recheck_interval">
+		<text>Интервал перепроверки цели (мс) (ai_enemy_recheck_interval)</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_recheck_interval_desc">
+		<text>Как часто NPC в бою заново выбирает цель, даже если ничего не произошло.\n \nNPC атакуют ближайшего видимого противника. Без регулярной перепроверки (0, как в оригинале) подошедший ближе противник стал бы целью, только когда начал бы стрелять. По умолчанию 1000 мс.</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_switch_margin">
+		<text>Запас смены цели (ai_enemy_switch_margin)</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_switch_margin_desc">
+		<text>Насколько ближе должен быть другой противник, чтобы NPC переключился на него.\n \nПо умолчанию 0.2 (примерно на 10% ближе). Не даёт NPC метаться между двумя противниками на почти одинаковом расстоянии. 0 означает переключение на ближайшего при каждой перепроверке.</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_bias_actor_sees">
+		<text>Приоритет цели: игрок видит NPC (ai_enemy_bias_actor_sees)</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_bias_actor_sees_desc">
+		<text>Дополнительный приоритет игрока как цели, пока NPC находится на экране игрока.\n \nПо умолчанию 0: NPC атакуют ближайшего видимого противника, будь то игрок или нет. В оригинале было 900, из-за чего NPC бросали другие бои и стреляли в игрока, как только он на них смотрел.</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_bias_npc_sees">
+		<text>Приоритет цели: NPC видит NPC (ai_enemy_bias_npc_sees)</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_bias_npc_sees_desc">
+		<text>Дополнительный приоритет другого NPC или мутанта, который сейчас видит NPC.\n \nПо умолчанию 0: NPC атакуют ближайшего видимого противника. В оригинале было 300.</text>
 	</string>
 	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_hold_position_inertia_base">
 		<text>База инерции удержания позиции ИИ (мс) (ai_hold_position_inertia_base)</text>

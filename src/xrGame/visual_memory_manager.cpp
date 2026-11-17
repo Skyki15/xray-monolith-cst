@@ -497,6 +497,42 @@ bool CVisualMemoryManager::should_ignore_object(CObject const* object) const
 	return false;
 }
 
+bool CVisualMemoryManager::has_static_line_of_sight(const CObject* object) const
+{
+	if (!object || !m_object)
+		return (false);
+
+	Fvector const& eye_position = m_object->eye_matrix.c;
+
+	Fvector target;
+	object->Center(target);
+
+	Fvector direction;
+	direction.sub(target, eye_position);
+	float const distance = direction.magnitude();
+	if (distance < EPS_L)
+		return (true);
+
+	direction.div(distance);
+
+	// Stop a little short of the target so geometry right at its centre doesn't count
+	float const range = distance - 0.3f;
+	if (range <= 0.f)
+		return (true);
+
+	collide::rq_result ray_query_result;
+	BOOL const hit = Level().ObjectSpace.RayPick(
+		eye_position,
+		direction,
+		range,
+		collide::rqtStatic,
+		ray_query_result,
+		NULL
+	);
+
+	return (!hit);
+}
+
 void CVisualMemoryManager::add_visible_object(const CObject* object, float time_delta, bool fictitious)
 {
 	if (!fictitious && should_ignore_object(object))

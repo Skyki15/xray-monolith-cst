@@ -223,14 +223,30 @@ void CCoverEvaluatorBest::evaluate_cover(const CCoverPoint* cover_point, float w
 	if (ai().level_graph().neighbour_in_direction(direction, cover_point->level_vertex_id()))
 		value += 10.f;
 
-	if (m_stalker && m_stalker->agent_manager().member().members().size() > 1) {
-		for (auto& it : m_stalker->agent_manager().member().members()) {
-			CAI_Stalker* teammate = &it->object();
-			if (teammate->ID() == m_stalker->ID()) continue;
-			
-			// 1.5m squared is 2.25f. Huge penalty if a teammate is already hiding here.
-			if (teammate->Position().distance_to_sqr(cover_point->position()) < 2.25f) {
+	// Squad spacing: avoid covers a squadmate already claims or occupies.
+	// The cover we currently hold is exempt from the "occupied" test, otherwise a squadmate
+	// walking past would make update_best_cover_actuality() invalidate it and force a re-pick.
+	// If two members claim the same cover, the lower ID keeps it so they can't both give it up.
+	if (m_stalker && m_stalker->agent_manager().member().members().size() > 1)
+	{
+		const bool is_my_cover = (m_stalker->current_best_cover() == cover_point);
+		for (auto& it : m_stalker->agent_manager().member().members())
+		{
+			const CAI_Stalker* teammate = &it->object();
+			if (teammate->ID() == m_stalker->ID())
+				continue;
+
+			const bool claimed = (teammate->current_best_cover() == cover_point) &&
+				(!is_my_cover || teammate->ID() < m_stalker->ID());
+
+			// 1.5m squared is 2.25f
+			const bool occupied = !is_my_cover &&
+				(teammate->Position().distance_to_sqr(cover_point->position()) < 2.25f);
+
+			if (claimed || occupied)
+			{
 				value += 1000.f;
+				break;
 			}
 		}
 	}

@@ -64,6 +64,11 @@ private:
 public:
 	void add_visible_object(const CObject* object, float time_delta, bool fictitious = false);
 
+	// True when no static level geometry blocks the line from our eyes to the object's centre.
+	// add_visible_object() itself only checks FOV and range; use this before "revealing"
+	// an object from a non-visual cue (a sound or a hit).
+	bool has_static_line_of_sight(const CObject* object) const;
+
 protected:
 	IC void fill_object(CVisibleObject& visible_object, const CGameObject* game_object);
 	bool should_ignore_object(CObject const* object) const;

@@ -505,6 +505,79 @@ void CStalkerActionKillEnemy::execute()
 CStalkerActionTakeCover::CStalkerActionTakeCover(CAI_Stalker* object, LPCSTR action_name) :
 	inherited(object, action_name)
 {
+	m_last_notified_cover = nullptr;
+	m_stack_vertex_id = u32(-1);
+	m_stack_position.set(0.f, 0.f, 0.f);
+	m_stack_next_update_time = 0;
+}
+
+// Teammate-stacking fallback limits
+static const float STACK_MAX_TEAMMATE_DISTANCE = 15.f; // only stack on squadmates this close to us
+static const float STACK_BACK_OFFSET = 1.5f; // metres behind the teammate, away from the enemy
+static const float STACK_SIDE_OFFSET = 0.8f; // metres to the side, so the teammate doesn't block our line of fire
+static const u32 STACK_UPDATE_INTERVAL = 1500; // ms between re-selecting the stack position
+
+bool CStalkerActionTakeCover::select_teammate_stack_position(const Fvector& enemy_position)
+{
+	if (object().agent_manager().member().members().size() < 2)
+		return (false);
+
+	const CAI_Stalker* best_teammate = nullptr;
+	float best_distance_sqr = _sqr(STACK_MAX_TEAMMATE_DISTANCE);
+
+	for (auto& it : object().agent_manager().member().members())
+	{
+		const CAI_Stalker* teammate = &it->object();
+		if (teammate->ID() == object().ID() || !teammate->g_Alive())
+			continue;
+
+		if (!teammate->memory().enemy().selected())
+			continue;
+
+		const float distance_sqr = teammate->Position().distance_to_sqr(object().Position());
+		if (distance_sqr >= best_distance_sqr)
+			continue;
+
+		best_distance_sqr = distance_sqr;
+		best_teammate = teammate;
+	}
+
+	if (!best_teammate)
+		return (false);
+
+	// "Behind" is relative to the enemy, not to where the teammate happens to be facing
+	Fvector away_from_enemy;
+	away_from_enemy.sub(best_teammate->Position(), enemy_position);
+	away_from_enemy.y = 0.f;
+	if (away_from_enemy.square_magnitude() < EPS_L)
+		return (false);
+	away_from_enemy.normalize();
+
+	// Step to the side we are already on, so we keep a firing lane past the teammate
+	Fvector side;
+	side.set(-away_from_enemy.z, 0.f, away_from_enemy.x);
+	Fvector to_self;
+	to_self.sub(object().Position(), best_teammate->Position());
+	if (side.dotproduct(to_self) < 0.f)
+		side.invert();
+
+	Fvector stack_position;
+	stack_position.mad(best_teammate->Position(), away_from_enemy, STACK_BACK_OFFSET);
+	stack_position.mad(side, STACK_SIDE_OFFSET);
+
+	const u32 vertex_id = ai().level_graph().vertex_id(stack_position);
+	if (!ai().level_graph().valid_vertex_id(vertex_id))
+		return (false);
+
+	// Respect this NPC's own space restrictors, not just global graph accessibility
+	if (!object().movement().accessible(vertex_id))
+		return (false);
+
+	stack_position.y = ai().level_graph().vertex_plane_y(vertex_id, stack_position.x, stack_position.z);
+
+	m_stack_vertex_id = vertex_id;
+	m_stack_position = stack_position;
+	return (true);
 }
 
 void CStalkerActionTakeCover::initialize()
@@ -512,6 +585,8 @@ void CStalkerActionTakeCover::initialize()
 	inherited::initialize();
 
 	m_last_notified_cover = nullptr;
+	m_stack_vertex_id = u32(-1);
+	m_stack_next_update_time = 0;
 	m_body_state = object().movement().body_state();
 	//	m_movement_type								= Random.randI(2) ? eMovementTypeRun : eMovementTypeWalk;
 	m_movement_type = g_ai_move_to_cover_run ? eMovementTypeRun : eMovementTypeWalk;
@@ -610,33 +685,24 @@ void CStalkerActionTakeCover::execute()
 	}
 	else
 	{
-		bool teammate_cover_found = false;
-		if (object().agent_manager().member().members().size() > 1) {
-			for (auto& it : object().agent_manager().member().members()) {
-				CAI_Stalker* teammate = &it->object();
-				if (teammate->ID() == object().ID()) continue;
-				
-				if (teammate->memory().enemy().selected()) {
-					Fvector teammate_pos = teammate->Position();
-					Fvector teammate_dir = teammate->Direction();
-					
-					Fvector stack_pos;
-					stack_pos.mad(teammate_pos, teammate_dir, -1.2f);
-					
-					u32 target_vertex_id = ai().level_graph().vertex_id(stack_pos);
-					if (ai().level_graph().valid_vertex_id(target_vertex_id) && ai().level_graph().is_accessible(target_vertex_id)) {
-						object().movement().set_level_dest_vertex(target_vertex_id);
-						object().movement().set_desired_position(&stack_pos);
-						teammate_cover_found = true;
-						break;
-					}
-				}
-			}
+		// No cover point: fall back to stacking behind a nearby squadmate.
+		// Re-select on an interval rather than every frame, so the path isn't rebuilt constantly
+		// while the teammate moves.
+		if (Device.dwTimeGlobal >= m_stack_next_update_time)
+		{
+			m_stack_next_update_time = Device.dwTimeGlobal + STACK_UPDATE_INTERVAL;
+			if (!select_teammate_stack_position(position))
+				m_stack_vertex_id = u32(-1);
 		}
-		
-		if (!teammate_cover_found) {
+
+		if (ai().level_graph().valid_vertex_id(m_stack_vertex_id))
+		{
+			object().movement().set_level_dest_vertex(m_stack_vertex_id);
+			object().movement().set_desired_position(&m_stack_position);
+		}
+		else
 			object().movement().set_nearest_accessible_position();
-		}
+
 		object().brain().affect_cover(true);
 	}
 
@@ -743,6 +809,44 @@ float current_cover(CAI_Stalker* object)
 	return (ray_query_result.range);
 }
 
+// Minimum unobstructed distance towards the enemy for a stalker to count as "looked out".
+// Must stay >= the 3m threshold CStalkerActionHoldPosition uses to reset LookedOut,
+// otherwise look_out and hold_position ping-pong.
+static const float LOOK_OUT_CLEAR_DISTANCE = 3.f;
+
+// Returns true when the line from the stalker's eyes towards the enemy is free of static
+// geometry for LOOK_OUT_CLEAR_DISTANCE (or up to the enemy, if it is closer than that).
+// Unlike current_cover() this tests the direction to the enemy rather than wherever the
+// head currently points, so a stalker facing a wall next to a doorway doesn't count as
+// looked out, and one whose head hasn't finished turning isn't held back.
+static bool has_clear_view_to(CAI_Stalker* object, const Fvector& enemy_position)
+{
+	Fvector const& eye_position = object->eye_matrix.c;
+
+	Fvector target = enemy_position;
+	target.y += 1.2f; // roughly chest height; enemy_position is at the feet
+
+	Fvector direction;
+	direction.sub(target, eye_position);
+	float const distance = direction.magnitude();
+	if (distance < EPS_L)
+		return (true);
+
+	direction.div(distance);
+
+	collide::rq_result ray_query_result;
+	BOOL const hit = Level().ObjectSpace.RayPick(
+		eye_position,
+		direction,
+		_min(distance, LOOK_OUT_CLEAR_DISTANCE),
+		collide::rqtStatic,
+		ray_query_result,
+		NULL
+	);
+
+	return (!hit);
+}
+
 void CStalkerActionLookOut::finalize()
 {
 	inherited::finalize();
@@ -783,8 +887,7 @@ void CStalkerActionLookOut::execute()
 	object().best_cover(mem_object.m_object_params.m_position);
 	//-Alundaio
 
-	float dist_to_enemy = object().Position().distance_to(mem_object.m_object_params.m_position);
-	if (current_cover(m_object) >= dist_to_enemy)
+	if (has_clear_view_to(m_object, mem_object.m_object_params.m_position))
 	{
 		object().movement().set_nearest_accessible_position();
 		m_storage->set_property(eWorldPropertyLookedOut, true);

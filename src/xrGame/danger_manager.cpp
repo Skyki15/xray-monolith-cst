@@ -15,9 +15,11 @@
 #include "enemy_manager.h"
 #include "actor.h"
 #include "object_broker.h"
+#include "level.h"
 
-// Danger perception multipliers. 1.0 = original engine behaviour.
-// Applied as: base_score * multiplier. 0.0 disables that danger type entirely.
+// Danger perception (urgency) multipliers. 1.0 = original engine behaviour.
+// Applied as: base_score / multiplier, because the lowest score wins, so higher = more urgent.
+// 0.0 disables that danger type entirely. See CDangerManager::do_evaluate.
 float g_ai_danger_ricochet_mult         = 1.f;
 float g_ai_danger_attack_sound_mult     = 1.f;
 float g_ai_danger_entity_attacked_mult  = 1.f;
@@ -208,60 +210,77 @@ float CDangerManager::evaluate(const CDangerObject& object) const
 
 float CDangerManager::do_evaluate(const CDangerObject& object) const
 {
-	float result = 0.f;
+	// Lower score = more urgent: update() selects the danger with the MINIMUM score.
+	// The multipliers therefore divide the base score, so 2.0 makes a danger type twice as
+	// urgent, 0.5 half as urgent, and 0.0 removes it from selection entirely.
+	float base = 0.f;
+	float mult = 1.f;
 	switch (object.type())
 	{
 	case CDangerObject::eDangerTypeBulletRicochet:
 		{
 			// I perceived bullet(knife) ricochet
-			result += 3000.f * g_ai_danger_ricochet_mult;
+			base = 3000.f;
+			mult = g_ai_danger_ricochet_mult;
 			break;
 		}
 	case CDangerObject::eDangerTypeAttackSound:
 		{
 			// someone is shooting
-			result += 2500.f * g_ai_danger_attack_sound_mult;
+			base = 2500.f;
+			mult = g_ai_danger_attack_sound_mult;
 			break;
 		}
 	case CDangerObject::eDangerTypeEntityAttacked:
 		{
 			// someone is hit
-			result += 2000.f * g_ai_danger_entity_attacked_mult;
+			base = 2000.f;
+			mult = g_ai_danger_entity_attacked_mult;
 			break;
 		}
 	case CDangerObject::eDangerTypeEntityDeath:
 		{
 			// someone becomes dead
-			result += 3000.f * g_ai_danger_entity_death_mult;
+			base = 3000.f;
+			mult = g_ai_danger_entity_death_mult;
 			break;
 		}
 	case CDangerObject::eDangerTypeFreshEntityCorpse:
 		{
 			// I see a corpse
-			result += 2250.f * g_ai_danger_corpse_mult;
+			base = 2250.f;
+			mult = g_ai_danger_corpse_mult;
 			break;
 		}
 	case CDangerObject::eDangerTypeAttacked:
 		{
 			// someone is attacked
-			result += 2000.f * g_ai_danger_attacked_mult;
+			base = 2000.f;
+			mult = g_ai_danger_attacked_mult;
 			break;
 		}
 	case CDangerObject::eDangerTypeGrenade:
 		{
 			// grenade to explode nearby
-			result += 1000.f * g_ai_danger_grenade_mult;
+			base = 1000.f;
+			mult = g_ai_danger_grenade_mult;
 			break;
 		}
 	case CDangerObject::eDangerTypeEnemySound:
 		{
 			// enemy sound nearby
-			result += 1000.f * g_ai_danger_enemy_sound_mult;
+			base = 1000.f;
+			mult = g_ai_danger_enemy_sound_mult;
 			break;
 		}
 	default: NODEFAULT;
 	}
 
+	// Disabled danger type: never selected (update() only picks scores below flt_max)
+	if (mult <= 0.f)
+		return (flt_max);
+
+	float result = base / mult;
 	result *= 10.f;
 	result += float(Device.dwTimeGlobal - object.time());
 
@@ -307,6 +326,22 @@ void CDangerManager::add(const CSoundObject& object)
 
 	if ((object.m_sound_type & SOUND_TYPE_INJURING) == SOUND_TYPE_INJURING)
 	{
+		// A non-hostile actor getting hurt: react only when a living creature attacked them
+		// (mutant, stalker, grenade thrower...), so companions and friends come to help.
+		// Self-inflicted or environmental damage (falls, anomalies, physics objects) is
+		// ignored, so those don't send friendly NPCs into danger mode.
+		const CActor* actor = smart_cast<const CActor*>(object.m_object);
+		if (actor && !m_object->is_relation_enemy(actor))
+		{
+			const u16 hitter_id = actor->last_hitter_id();
+			const CObject* hitter = (hitter_id != u16(-1) && hitter_id != actor->ID())
+				                        ? Level().Objects.net_Find(hitter_id)
+				                        : nullptr;
+			const CEntityAlive* attacker = smart_cast<const CEntityAlive*>(hitter);
+			if (!attacker || !attacker->g_Alive())
+				return;
+		}
+
 		add(CDangerObject(obj, object.m_object_params.m_position, object.m_level_time,
 		                  CDangerObject::eDangerTypeEntityAttacked, CDangerObject::eDangerPerceiveTypeSound));
 		return;

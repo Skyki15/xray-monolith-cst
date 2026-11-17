@@ -27,9 +27,28 @@
 #include "agent_manager.h"
 #include "agent_enemy_manager.h"
 
-u32 ENEMY_INERTIA_TIME_TO_SOMEBODY = 3000;
-u32 ENEMY_INERTIA_TIME_TO_ACTOR = 0;
-u32 ENEMY_INERTIA_TIME_FROM_ACTOR = 6000;
+// Target-switch inertia (ms). Vanilla was 3000 / 0 / 6000: switching TO the actor was instant
+// while switching AWAY from the actor was blocked for 6s, which made NPCs lock onto the player.
+// Now symmetric and short (roughly human reaction time).
+u32 ENEMY_INERTIA_TIME_TO_SOMEBODY = 600;
+u32 ENEMY_INERTIA_TIME_TO_ACTOR = 600;
+u32 ENEMY_INERTIA_TIME_FROM_ACTOR = 600;
+
+// Selection bonus for an enemy that can currently see us (subtracted from its cost; lower cost wins).
+// Vanilla used 900 for the actor (the actor "sees" anything on screen) vs 300 for NPCs, so the
+// player out-scored an NPC enemy unless ~245m farther away. Default 0 now: among visible enemies
+// the closest one wins. Per-NPC npc:set_visible_enemy_bias() still overrides these.
+float g_ai_enemy_bias_actor_sees = 0.f;
+float g_ai_enemy_bias_npc_sees = 0.f;
+
+// How often (ms) an NPC in combat re-checks its target even if nothing happened, so a closer
+// visible enemy can take over without having to shoot first. 0 = only on events (vanilla).
+u32 g_ai_enemy_recheck_interval = 1000;
+
+// Switch margin: the current target's distance cost is reduced by this fraction, so a new target
+// must be clearly closer (0.2 -> ~10% closer) to take over. Stops flip-flopping between enemies
+// at nearly the same distance.
+float g_ai_enemy_switch_margin = 0.2f;
 
 #ifdef _DEBUG
 bool g_enemy_manager_second_update	 = false;
@@ -51,14 +70,16 @@ CEnemyManager::CEnemyManager(CCustomMonster* object)
 	m_smart_cover_enemy = 0;
 	m_visible_enemy_bias_actor = -1.f;
 	m_visible_enemy_bias_npc = -1.f;
+	m_hit_redirect_max = -1.f; // < 0 = unset, use the default hit bonus in evaluate()
+	m_hit_redirect_falloff = 60.f;
+	m_last_recheck_time = 0;
+	m_current_target_for_eval = nullptr;
 }
 
 void CEnemyManager::set_visible_enemy_bias(float actor_bias, float npc_bias)
 {
 	m_visible_enemy_bias_actor = actor_bias;
 	m_visible_enemy_bias_npc = npc_bias;
-	m_hit_redirect_max = -1.f;
-	m_hit_redirect_falloff = 60.f;
 }
 
 void CEnemyManager::set_hit_redirect(float max, float falloff)
@@ -142,46 +163,48 @@ float CEnemyManager::evaluate(const CEntityAlive* object) const
 		return (distance);
 	}
 
+	// Target priority:
+	//   1. Enemies we can see right now always come first (the -1000 equals a ~316m distance gap).
+	//   2. Among those, the CLOSEST one wins. Being shot by a farther visible enemy does not
+	//      override a closer one - the closest enemy is the bigger threat.
+	//   3. If no enemy is visible, an unseen attacker gets priority so we turn toward the shooter.
+
 	float d2 = m_object->Position().distance_to_sqr(object->Position());
+	const bool visible = m_object->memory().visual().visible_now(object);
 
 	float penalty = 10000.f;
+
+	// if we see object
+	if (visible)
+		penalty -= 1000.f;
 
 	// if we are hit
 	if (object->ID() == m_object->memory().hit().last_hit_object_id())
 	{
 		if (m_hit_redirect_max >= 0.f)
 		{
-			// per-NPC bonus, decays to 0 by m_hit_redirect_falloff distance
+			// per-NPC script lever (npc:set_hit_redirect), decays to 0 by m_hit_redirect_falloff distance
 			float falloff2 = m_hit_redirect_falloff * m_hit_redirect_falloff;
 			if (d2 < falloff2)
 				penalty -= m_hit_redirect_max * (1.f - d2 / falloff2);
 		}
-		// In CQB (< 30m), the distance score variance is only 0 to 9 points.
-		// A tiny -5 penalty ensures they turn to a flanker at 15m, 
-		// but WON'T ignore a guy actively fighting them at 5m just because they got shot!
-		else if (m_object->Position().distance_to(object->Position()) < 30.f)
-			penalty -= 5.f;
-			
-		// For medium/long range, give a standard 100m aggro advantage
-		// so they still react to snipers if they aren't busy with a close target.
-		else
-			penalty -= 100.f;
+		// Default: only an attacker we CAN'T see gets a bonus (cancels its distance term, clamped
+		// to [5, 100]). A visible attacker gets none, so "whoever hit me last" no longer steals
+		// focus from a closer visible enemy.
+		else if (!visible)
+			penalty -= _max(5.f, _min(d2 / 100.f, 100.f));
 	}
-
-	// if we see object
-	if (m_object->memory().visual().visible_now(object))
-		penalty -= 1000.f;
 
 	// if object is actor and he/she sees us
 	if (actor) {
 		if (actor->memory().visual().visible_now(m_object))
-			penalty -= (m_visible_enemy_bias_actor >= 0.f) ? m_visible_enemy_bias_actor : 900.f;
+			penalty -= (m_visible_enemy_bias_actor >= 0.f) ? m_visible_enemy_bias_actor : g_ai_enemy_bias_actor_sees;
 	}
 	else {
 		// if object is npc and it sees us
 		const CCustomMonster	*monster = smart_cast<const CCustomMonster*>(object);
 		if (monster && monster->memory().visual().visible_now(m_object))
-			penalty -= (m_visible_enemy_bias_npc >= 0.f) ? m_visible_enemy_bias_npc : 300.f;
+			penalty -= (m_visible_enemy_bias_npc >= 0.f) ? m_visible_enemy_bias_npc : g_ai_enemy_bias_npc_sees;
 	}
 
 #ifdef USE_EVALUATOR
@@ -190,9 +213,15 @@ float CEnemyManager::evaluate(const CEntityAlive* object) const
 	ai().ef_storage().non_alife().member() = m_object;
 	ai().ef_storage().non_alife().enemy() = object;
 
+	// Distance. The target we already hold gets a switch margin, so another enemy has to be
+	// clearly closer to take over (no flip-flopping between enemies at nearly the same range).
+	float distance_cost = d2 / 100.f;
+	if (object == m_current_target_for_eval)
+		distance_cost *= (1.f - _max(0.f, _min(g_ai_enemy_switch_margin, 0.9f)));
+
 	return (
 		penalty +
-		d2 / 100.f
+		distance_cost
 	);
 #else // USE_EVALUATOR
 	float					distance = m_object->Position().distance_to_sqr(object->Position());
@@ -436,6 +465,11 @@ bool CEnemyManager::need_update(const bool& only_wounded) const
 	//	if (Actor() && m_object->memory().visual().visible_now(Actor()))
 	//		return					(true);
 
+	// Periodic re-check: without it the target only changes on events (lost sight, got hit...),
+	// so a closer enemy walking up without shooting would never take over.
+	if (g_ai_enemy_recheck_interval && (Device.dwTimeGlobal >= m_last_recheck_time + g_ai_enemy_recheck_interval))
+		return (true);
+
 	return (false);
 }
 
@@ -448,7 +482,10 @@ void CEnemyManager::try_change_enemy()
 	if (!need_update(only_wounded))
 		return;
 
+	m_last_recheck_time = Device.dwTimeGlobal;
+	m_current_target_for_eval = previous_selected;
 	inherited::update();
+	m_current_target_for_eval = nullptr;
 
 	if (selected() != previous_selected)
 	{

@@ -936,7 +936,7 @@
 		<text>Stalkers Enemy Inertia: To Actor (ms) (ai_enemy_inertia_time_to_actor)</text>
 	</string>
 	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_inertia_time_to_actor_desc">
-		<text>Controls the delay before an NPC can switch their focus from another target to the Player.\n \nSetting this to 0 (default) means NPCs will drop everything to shoot the player the moment they are detected. Increasing this gives the player a "grace period" if the NPC is already busy fighting someone else.</text>
+		<text>Controls the delay before an NPC can switch their focus from another target to the Player.\n \nDefault 600 ms, the same as for any other target. 0 (vanilla) means NPCs drop everything to shoot the player the moment they are detected. Increasing this gives the player a "grace period" if the NPC is already busy fighting someone else.</text>
 	</string>
 	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_inertia_time_from_actor">
 		<text>Stalkers Enemy Inertia: From Actor (ms) (ai_enemy_inertia_time_from_actor)</text>
@@ -949,6 +949,30 @@
 	</string>
 	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_search_inertia_time_desc">
 		<text>Sets the duration an NPC will remain in the "Search/Ambush" state after losing visual contact with a target.\n \nHigh values (default 15s) make NPCs stay alert and camp corners or cover for a long time. Low values make them give up quickly and return to idle/patrol states sooner.</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_recheck_interval">
+		<text>Stalkers Target Re-check Interval (ms) (ai_enemy_recheck_interval)</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_recheck_interval_desc">
+		<text>How often an NPC in combat re-checks which enemy to target, even if nothing happened.\n \nNPCs target the closest enemy they can see. Without regular re-checks (0, vanilla) a closer enemy walking up would only be noticed as a target once it started shooting. Default 1000 ms.</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_switch_margin">
+		<text>Stalkers Target Switch Margin (ai_enemy_switch_margin)</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_switch_margin_desc">
+		<text>How much closer another enemy must be before an NPC switches to it.\n \nDefault 0.2 (about 10% closer). Prevents NPCs from flipping between two enemies at almost the same distance. 0 switches to whichever enemy is closest at every re-check.</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_bias_actor_sees">
+		<text>Stalkers Target Bias: Player Sees NPC (ai_enemy_bias_actor_sees)</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_bias_actor_sees_desc">
+		<text>Extra preference for targeting the player while the NPC is on the player's screen.\n \nDefault 0: NPCs target the closest enemy they can see, player or not. Vanilla used 900, which made NPCs drop other fights to shoot the player whenever the player looked at them.</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_bias_npc_sees">
+		<text>Stalkers Target Bias: NPC Sees NPC (ai_enemy_bias_npc_sees)</text>
+	</string>
+	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_enemy_bias_npc_sees_desc">
+		<text>Extra preference for targeting another NPC or mutant that can currently see them.\n \nDefault 0: NPCs target the closest enemy they can see. Vanilla used 300.</text>
 	</string>
 	<string id="ui_mm_modded_exes_gameplay_stalkers_ai_hold_position_inertia_base">
 		<text>Stalkers Hold Position Inertia Base (ms) (ai_hold_position_inertia_base)</text>
